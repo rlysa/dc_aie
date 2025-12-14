@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import pandas as pd
 
-from eda_cli.core import (
+from src.eda_cli.core import (
     compute_quality_flags,
     correlation_matrix,
     flatten_summary_for_print,
     missing_table,
     summarize_dataset,
     top_categories,
+    ColumnSummary,
+    DatasetSummary,
 )
 
 
@@ -59,3 +61,42 @@ def test_correlation_and_top_categories():
     city_table = top_cats["city"]
     assert "value" in city_table.columns
     assert len(city_table) <= 2
+
+
+def test_new_quality_flags(): # Специальный DataFrame для проверки всех новых эвристик
+    n = 60  # число строк
+    df = pd.DataFrame({
+        "user_id": list(range(1, n)) + [2],  # дубликат -> has_suspicious_id_duplicates=True
+        "numeric_col": [0] * n,  # все нули -> has_many_zero_values=True
+        "constant_col": [5] * n,  # константа -> has_constant_columns=True
+        "category_col": [f"A{i}" for i in range(n)],  # >50 уникальных -> has_high_cardinality_categoricals=True
+    })
+
+    columns = []
+    for col in df.columns:
+        s = df[col]
+        columns.append(
+            ColumnSummary(
+                name=col,
+                dtype=str(s.dtype),
+                non_null=s.notna().sum(),
+                missing=len(s) - s.notna().sum(),
+                missing_share=0.0,
+                unique=s.nunique(),
+                example_values=s.dropna().astype(str).unique()[:3].tolist(),
+                is_numeric=pd.api.types.is_numeric_dtype(s),
+                min=s.min() if pd.api.types.is_numeric_dtype(s) else None,
+                max=s.max() if pd.api.types.is_numeric_dtype(s) else None,
+                mean=s.mean() if pd.api.types.is_numeric_dtype(s) else None,
+                std=s.std() if pd.api.types.is_numeric_dtype(s) else None,
+            )
+        )
+
+    summary = DatasetSummary(n_rows=len(df), n_cols=len(df.columns), columns=columns)
+    missing_df = pd.DataFrame({"missing_share": [0.0]*len(df.columns)})
+    flags = compute_quality_flags(summary, missing_df)
+
+    assert flags["has_constant_columns"] is True
+    assert flags["has_high_cardinality_categoricals"] is True
+    assert flags["has_suspicious_id_duplicates"] is True
+    assert flags["has_many_zero_values"] is True

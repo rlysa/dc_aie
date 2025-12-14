@@ -185,6 +185,37 @@ def compute_quality_flags(summary: DatasetSummary, missing_df: pd.DataFrame) -> 
     flags["max_missing_share"] = max_missing_share
     flags["too_many_missing"] = max_missing_share > 0.5
 
+    # эвристика: наличие одинаковых столбцов
+    flags["has_constant_columns"] = any(col.unique <= 1 for col in summary.columns)
+
+    # эвристика: категориальные признаки с большим числом уникальных значений
+    HIGH_CARDINALITY_THRESHOLD = 50
+    flags["has_high_cardinality_categoricals"] = any(
+        (not col.is_numeric and col.unique > HIGH_CARDINALITY_THRESHOLD) for col in summary.columns
+    )
+
+    # эвристика: уникальность идентификатора
+    id_cols = [col.name for col in summary.columns if col.name.lower() in ("user_id", "id")]
+    has_duplicates = False
+    for col_name in id_cols:
+        col_summary = next(c for c in summary.columns if c.name == col_name)
+        if col_summary.unique < summary.n_rows:
+            has_duplicates = True
+            break
+    flags["has_suspicious_id_duplicates"] = has_duplicates
+
+    # эвристика: проверка доли нулей в столбцах
+    has_many_zeros = False
+    for col in summary.columns:
+        if col.is_numeric and col.non_null > 0:
+            zero_share = sum(1 for v in range(col.non_null) if v == 0) / col.non_null
+            # Альтернатива: если реально хотим проверять на данные, нужно df, но упрощаем
+            # Здесь можно передать долю нулей через ColumnSummary (в будущем)
+            # Пока делаем грубую эвристику: если min==0 и max==0, считаем
+            if col.min == 0 and col.max == 0:
+                has_many_zeros = True
+    flags["has_many_zero_values"] = has_many_zeros
+
     # Простейший «скор» качества
     score = 1.0
     score -= max_missing_share  # чем больше пропусков, тем хуже

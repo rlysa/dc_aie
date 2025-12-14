@@ -62,11 +62,14 @@ def overview(
 
 @app.command()
 def report(
-    path: str = typer.Argument(..., help="Путь к CSV-файлу."),
-    out_dir: str = typer.Option("reports", help="Каталог для отчёта."),
-    sep: str = typer.Option(",", help="Разделитель в CSV."),
-    encoding: str = typer.Option("utf-8", help="Кодировка файла."),
-    max_hist_columns: int = typer.Option(6, help="Максимум числовых колонок для гистограмм."),
+        path: str = typer.Argument(..., help="Путь к CSV-файлу."),
+        out_dir: str = typer.Option("reports", help="Каталог для отчёта."),
+        sep: str = typer.Option(",", help="Разделитель в CSV."),
+        encoding: str = typer.Option("utf-8", help="Кодировка файла."),
+        max_hist_columns: int = typer.Option(6, help="Максимум числовых колонок для гистограмм."),
+        top_k_categories: int = typer.Option(5, help="Сколько top-значений выводить для категориальных колонок."), # новый параметр: top-значений выводить для категориальных признаков
+        min_missing_share: float = typer.Option(0.2, help="Порог доли пропусков для проблемных колонок."), # новый параметр: порог доли пропусков, выше которого колонка считается проблемной и попадает в отдельный список в отчёте
+        title: str = typer.Option("EDA-отчёт", help="Заголовок Markdown-отчёта."), # новый параметр: заголовок отчёта
 ) -> None:
     """
     Сгенерировать полный EDA-отчёт:
@@ -91,6 +94,9 @@ def report(
     # 2. Качество в целом
     quality_flags = compute_quality_flags(summary, missing_df)
 
+    problem_cols = [col.name for col in summary.columns if col.missing_share > min_missing_share]  #проблемные колонки
+    top_cats = top_categories(df, top_k=top_k_categories)  # топ-k категорий (из нового параметра)
+
     # 3. Сохраняем табличные артефакты
     summary_df.to_csv(out_root / "summary.csv", index=False)
     if not missing_df.empty:
@@ -102,6 +108,7 @@ def report(
     # 4. Markdown-отчёт
     md_path = out_root / "report.md"
     with md_path.open("w", encoding="utf-8") as f:
+        f.write(f"# {title}\n\n")
         f.write(f"# EDA-отчёт\n\n")
         f.write(f"Исходный файл: `{Path(path).name}`\n\n")
         f.write(f"Строк: **{summary.n_rows}**, столбцов: **{summary.n_cols}**\n\n")
@@ -128,11 +135,18 @@ def report(
         else:
             f.write("См. `correlation.csv` и `correlation_heatmap.png`.\n\n")
 
+        f.write(f"## Проблемные колонки (> {min_missing_share*100:.0f}% пропусков)\n")
+        f.write(", ".join(problem_cols) + "\n\n")
+
         f.write("## Категориальные признаки\n\n")
         if not top_cats:
             f.write("Категориальные/строковые признаки не найдены.\n\n")
         else:
-            f.write("См. файлы в папке `top_categories/`.\n\n")
+            for col_name, table in top_cats.items():  # вывод заданный топ категорий
+                f.write(f"### {col_name}\n")
+                for idx, row in table.iterrows():
+                    f.write(f"- {row['value']}: {row['count']} ({row['share']:.2%})\n")
+                f.write("\n")
 
         f.write("## Гистограммы числовых колонок\n\n")
         f.write("См. файлы `hist_*.png`.\n")

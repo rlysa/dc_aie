@@ -22,9 +22,11 @@ uv sync
 - установит зависимости из `pyproject.toml`;
 - установит сам проект `eda-cli` в окружение.
 
-## Запуск CLI
+## Доступные команды CLI
 
-### Краткий обзор
+### 1. overview
+
+Выводит краткий обзор датасета:
 
 ```bash
 uv run eda-cli overview data/example.csv
@@ -35,7 +37,16 @@ uv run eda-cli overview data/example.csv
 - `--sep` – разделитель (по умолчанию `,`);
 - `--encoding` – кодировка (по умолчанию `utf-8`).
 
-### Полный EDA-отчёт
+Вывод включает:
+
+- количество строк и колонок; 
+- типы колонок; 
+- количество пропусков и уникальные значения; 
+- примерные значения.
+
+### 2. report
+
+Выводит полный EDA-отчёт
 
 ```bash
 uv run eda-cli report data/example.csv --out-dir reports
@@ -51,8 +62,24 @@ uv run eda-cli report data/example.csv --out-dir reports
 - `hist_*.png` – гистограммы числовых колонок;
 - `missing_matrix.png` – визуализация пропусков;
 - `correlation_heatmap.png` – тепловая карта корреляций.
+- `max_hist_columns` - количество числовых колонок в наборе гистограмм
+- `top_k_categories` - количество top-значений в выводе для категориальных признаков
+- `min_missing_share` - порог доли пропусков, выше которого колонка считается проблемной и попадает в отдельный список в отчёте.
+- `title` - заголовок отчета
 
-## Тесты
+
+Пример использования с новыми опциями
+``bash
+uv run eda-cli report data/example.csv \
+    --out-dir reports \
+    --max-hist-columns 4 \
+    --top-k-categories 3 \
+    --min-missing-share 0.1 \
+    --title "Отчёт по Example CSV"
+``
+
+
+## 3. тесты
 
 ```bash
 uv run pytest -q
